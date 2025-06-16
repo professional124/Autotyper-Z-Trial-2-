@@ -1,1 +1,40 @@
-<!-- Dashboard Template -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        function refreshBots() {
+            fetch('/api/bots')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('bots');
+                    container.innerHTML = '';
+                    for (const botId in data) {
+                        const bot = data[botId];
+                        const div = document.createElement('div');
+                        div.innerHTML = '<strong>' + bot.username + '</strong> - Races: ' + bot.races_done + ' - Status: ' + bot.status +
+                            ' <button onclick="stopBot(\\'' + botId + '\\')">Stop</button>';
+                        container.appendChild(div);
+                    }
+                });
+        }
+        function stopBot(botId) {
+            fetch('/api/stop/' + botId, {method: 'POST'})
+                .then(() => refreshBots());
+        }
+        setInterval(refreshBots, 3000);
+        window.onload = refreshBots;
+    </script>
+</head>
+<body>
+    <nav>
+        <a href="{{ url_for('home') }}">Home</a> |
+        <a href="{{ url_for('start_bot') }}">Start Bot</a> |
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    </nav>
+    <h1>Active Bots Dashboard</h1>
+    <div id="bots"></div>
+</body>
+</html>
