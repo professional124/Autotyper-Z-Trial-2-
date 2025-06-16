@@ -1,37 +1,36 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from bot_manager import BotManager
+import threading
 
 app = Flask(__name__)
 bot_manager = BotManager()
 
-@app.route('/')
-def home():
-    return render_template('home.html')
+@app.route("/", methods=["GET"])
+def index():
+    # Show form + current active bots
+    bots = bot_manager.get_active_bots()
+    return render_template("index.html", bots=bots)
 
-@app.route('/start', methods=['GET', 'POST'])
+@app.route("/start_bot", methods=["POST"])
 def start_bot():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        avg_wpm = float(request.form['avg_wpm'])
-        min_accuracy = float(request.form['min_accuracy'])
-        race_count = int(request.form['race_count'])
-        bot_manager.start_bot(username, password, avg_wpm, min_accuracy, race_count)
-        return redirect(url_for('dashboard'))
-    return render_template('start.html')
+    username = request.form.get("username")
+    password = request.form.get("password")
+    avg_wpm = float(request.form.get("avg_wpm", 40))
+    min_accuracy = int(request.form.get("min_accuracy", 95))
+    races = int(request.form.get("races", 1))
 
-@app.route('/dashboard')
-def dashboard():
-    return render_template('dashboard.html')
+    if not username or not password:
+        return "Username and password are required", 400
 
-@app.route('/api/bots')
-def api_bots():
-    return jsonify(bot_manager.get_bots_status())
+    # Start the bot in background thread
+    bot_manager.start_bot(username, password, avg_wpm, min_accuracy, races)
 
-@app.route('/api/stop/<bot_id>', methods=['POST'])
-def stop_bot(bot_id):
-    bot_manager.stop_bot(bot_id)
-    return jsonify({'status': 'stopped'})
+    return redirect(url_for("index"))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+@app.route("/api/status", methods=["GET"])
+def api_status():
+    # Return JSON of current bots and race counts
+    return jsonify(bot_manager.get_active_bots())
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
