@@ -1,1 +1,230 @@
-<!-- Modal Form HTML -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chill 4 Ever - Add New Bot Task</title>
+  <style>
+    /* Reset and base */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #000;
+      color: #0ff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      user-select: none;
+      padding: 1rem;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-shadow: 0 0 10px #0ff;
+    }
+    form {
+      background: #001a2b;
+      padding: 2rem;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow:
+        0 0 20px #00ffffcc,
+        inset 0 0 15px #00ffffcc;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      user-select: text;
+    }
+    input[type="text"],
+    input[type="password"],
+    input[type="number"] {
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      margin-bottom: 1.2rem;
+      border: none;
+      border-radius: 8px;
+      background: #003344;
+      color: #0ff;
+      font-size: 1rem;
+      box-shadow: inset 0 0 8px #00ffffcc;
+      transition: box-shadow 0.3s ease;
+    }
+    input[type="text"]::placeholder,
+    input[type="password"]::placeholder,
+    input[type="number"]::placeholder {
+      color: #66ffffbb;
+    }
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    input[type="number"]:focus {
+      outline: none;
+      box-shadow:
+        0 0 10px #00ffff,
+        inset 0 0 12px #00ffffcc;
+      background: #004466;
+    }
+    button[type="submit"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 10px;
+      background: #00ffff;
+      color: #001a2b;
+      font-weight: 700;
+      font-size: 1.1rem;
+      cursor: pointer;
+      box-shadow: 0 0 15px #00ffffcc;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+      user-select: none;
+    }
+    button[type="submit"]:hover {
+      background: #00ccff;
+      box-shadow: 0 0 25px #00ccffff;
+    }
+    .message {
+      margin-top: 1rem;
+      text-align: center;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      display: none;
+    }
+    .message.error {
+      color: #ff4444;
+      display: block;
+    }
+    .message.success {
+      color: #33ff33;
+      display: block;
+    }
+    /* Back link */
+    .back-link {
+      display: block;
+      margin-top: 1.5rem;
+      text-align: center;
+      font-weight: 600;
+      color: #0ff;
+      text-decoration: none;
+      user-select: none;
+      letter-spacing: 0.7px;
+      transition: color 0.3s ease;
+    }
+    .back-link:hover {
+      color: #00ccff;
+      text-decoration: underline;
+    }
+    /* Responsive */
+    @media (max-width: 480px) {
+      form {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <form id="botTaskForm" autocomplete="off" novalidate>
+    <h1>Add New Bot Task</h1>
+
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" placeholder="Nitrotype username" required minlength="3" maxlength="20" autocomplete="username" />
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" placeholder="Account password" required minlength="6" autocomplete="current-password" />
+
+    <label for="avg_wpm">Average WPM (10-180)</label>
+    <input type="number" id="avg_wpm" name="avg_wpm" min="10" max="180" value="75" required />
+
+    <label for="min_accuracy">Minimum Accuracy (85-97%)</label>
+    <input type="number" id="min_accuracy" name="min_accuracy" min="85" max="97" value="90" required />
+
+    <label for="how_many_races">How Many Races</label>
+    <input type="number" id="how_many_races" name="how_many_races" min="1" max="1000" value="10" required />
+
+    <label for="subscription_key">Subscription Key</label>
+    <input type="text" id="subscription_key" name="subscription_key" placeholder="Your subscription key" required minlength="8" maxlength="64" />
+
+    <button type="submit">Submit Task</button>
+
+    <p id="formMessage" class="message"></p>
+
+    <a href="/tasks" class="back-link" aria-label="Go back to tasks page">← Back to Tasks</a>
+  </form>
+
+  <script>
+    const form = document.getElementById('botTaskForm');
+    const messageEl = document.getElementById('formMessage');
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      messageEl.style.display = 'none';
+      messageEl.textContent = '';
+
+      // Basic front-end validation
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+        const response = await fetch('/submit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams(data)
+        });
+
+        if (response.redirected) {
+          // If backend redirects on success, just follow it
+          window.location.href = response.url;
+          return;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          messageEl.textContent = 'Error: ' + errorText;
+          messageEl.className = 'message error';
+          messageEl.style.display = 'block';
+          return;
+        }
+
+        // If backend returns JSON success message
+        const result = await response.json();
+        if (result.success) {
+          messageEl.textContent = 'Task submitted successfully! Redirecting...';
+          messageEl.className = 'message success';
+          messageEl.style.display = 'block';
+          setTimeout(() => {
+            window.location.href = '/tasks';
+          }, 2000);
+        } else {
+          messageEl.textContent = 'Error: ' + (result.message || 'Unknown error');
+          messageEl.className = 'message error';
+          messageEl.style.display = 'block';
+        }
+
+      } catch (error) {
+        messageEl.textContent = 'Network error: ' + error.message;
+        messageEl.className = 'message error';
+        messageEl.style.display = 'block';
+      }
+    });
+  </script>
+
+</body>
+</html>
