@@ -1,232 +1,282 @@
-/* RESET */
-* {
-  margin: 0;
-  padding: 0;
+/* ========== Reset & Base ========== */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html {
-  scroll-behavior: smooth;
-}
-
 body {
+  margin: 0;
+  background-color: #000;
+  color: #0ff;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #0a0a0a;
-  color: #e0f7fa;
-  line-height: 1.6;
-}
-
-/* NAVBAR */
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
-  background-color: rgba(0, 0, 0, 0.8);
-  border-bottom: 1px solid #00e5ff;
-  backdrop-filter: blur(10px);
-}
-
-.logo {
-  font-size: 1.8rem;
-  font-weight: bold;
-  color: #00e5ff;
-  text-shadow: 0 0 10px #00e5ff;
-}
-
-.nav-links {
-  list-style: none;
-  display: flex;
-  gap: 2rem;
-}
-
-.nav-links a {
-  text-decoration: none;
-  color: #e0f7fa;
-  font-size: 1rem;
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.nav-links a::after {
-  content: '';
-  position: absolute;
-  width: 0%;
-  height: 2px;
-  left: 0;
-  bottom: -5px;
-  background: #00e5ff;
-  transition: width 0.3s ease;
-}
-
-.nav-links a:hover::after {
-  width: 100%;
-}
-
-.nav-links a:hover {
-  color: #00e5ff;
-  text-shadow: 0 0 10px #00e5ff;
-}
-
-.active {
-  color: #00e5ff;
-  font-weight: bold;
-}
-
-/* HERO SECTION */
-.hero-section {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 1rem;
+}
+
+/* ========== Typography ========== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 8px #0ff, 0 0 15px #0ff88;
+  margin: 0 0 1rem 0;
+}
+
+p, label, span {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  user-select: text;
+}
+
+a {
+  color: #0ff;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+a:hover,
+a:focus {
+  color: #00ccff;
+  text-decoration: underline;
+  outline: none;
+}
+
+/* ========== Forms ========== */
+form {
+  background: #001a2b;
+  padding: 2rem;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow:
+    0 0 20px #00ffffcc,
+    inset 0 0 15px #00ffffcc;
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  margin-bottom: 0.3rem;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+textarea {
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 1.2rem;
+  border: none;
+  border-radius: 8px;
+  background: #003344;
+  color: #0ff;
+  font-size: 1rem;
+  box-shadow: inset 0 0 8px #00ffffcc;
+  transition: box-shadow 0.3s ease, background-color 0.3s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #66ffffbb;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  background-color: #004466;
+  box-shadow:
+    0 0 10px #00ffff,
+    inset 0 0 12px #00ffffcc;
+}
+
+button[type="submit"],
+button.primary,
+button.floating {
+  background: #00ffff;
+  color: #001a2b;
+  font-weight: 700;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  box-shadow: 0 0 15px #00ffffcc;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  user-select: none;
+}
+
+button[type="submit"]:hover,
+button.primary:hover,
+button.floating:hover {
+  background: #00ccff;
+  box-shadow: 0 0 25px #00ccffff;
+}
+
+button.floating {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
-  text-align: center;
+  z-index: 1000;
+  user-select: none;
 }
 
-.neon-text {
-  font-size: 3rem;
-  color: #00e5ff;
-  text-shadow: 0 0 15px #00e5ff;
-  animation: pulse 3s infinite;
+/* ========== Navbar ========== */
+nav {
+  width: 100%;
+  background: #001a2b;
+  padding: 0.8rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  box-shadow: 0 0 15px #00ffffcc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-@keyframes pulse {
-  0% {
-    text-shadow: 0 0 5px #00e5ff;
+nav ul {
+  list-style: none;
+  display: flex;
+  gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+nav a {
+  color: #0ff;
+  font-weight: 600;
+  position: relative;
+  padding-bottom: 0.3rem;
+  transition: color 0.3s ease;
+  user-select: none;
+}
+
+nav a:hover,
+nav a:focus {
+  color: #00ccff;
+}
+
+nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, #00ffff, #00ccff, #0099ff, #00ffff);
+  border-radius: 10px;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.3s ease;
+  filter: drop-shadow(0 0 6px #00ffff);
+}
+
+nav a:hover::after,
+nav a:focus::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* ========== Animated Neon Glow Pulse (Rainbow-ish) ========== */
+@keyframes neonPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 5px #00ffff) drop-shadow(0 0 10px #00ffff);
   }
   50% {
-    text-shadow: 0 0 20px #00e5ff;
-  }
-  100% {
-    text-shadow: 0 0 5px #00e5ff;
+    filter: drop-shadow(0 0 10px #00ccff) drop-shadow(0 0 20px #00ccff);
   }
 }
 
-.tagline {
-  font-size: 1.2rem;
-  margin-top: 1rem;
-  color: #b2ebf2;
+/* Apply pulse to buttons and interactive elements */
+button[type="submit"],
+button.primary,
+.floating-btn {
+  animation: neonPulse 3s ease-in-out infinite;
 }
 
-.cta-btn {
-  margin-top: 2rem;
-  background-color: transparent;
-  border: 2px solid #00e5ff;
-  padding: 0.75rem 2rem;
-  font-size: 1rem;
-  color: #00e5ff;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: 0.3s ease;
-  border-radius: 8px;
-  text-decoration: none;
+/* ========== Containers and Layout ========== */
+.container {
+  width: 100%;
+  max-width: 1080px;
+  margin: 2rem auto;
+  padding: 0 1rem;
 }
 
-.cta-btn:hover {
-  background-color: #00e5ff;
-  color: #000;
-  box-shadow: 0 0 15px #00e5ff;
-}
-
-/* STATS SECTION */
-.stats-section {
+.flex-center {
   display: flex;
   justify-content: center;
-  gap: 2rem;
-  flex-wrap: wrap;
-  padding: 3rem 2rem;
-  background: #111;
+  align-items: center;
 }
 
-.stat-card {
-  background: #000;
-  border: 1px solid #00e5ff;
-  padding: 2rem;
-  border-radius: 10px;
-  min-width: 200px;
-  text-align: center;
-  box-shadow: 0 0 15px #00e5ff44;
-  transition: transform 0.3s ease;
+/* ========== Tables (for tasks or stats) ========== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #001a2b;
+  box-shadow: 0 0 15px #00ffffcc;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.stat-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 0 25px #00e5ffaa;
+th, td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  color: #0ff;
+  border-bottom: 1px solid #004466;
+  font-weight: 600;
+  user-select: text;
 }
 
-.stat-card h2 {
-  font-size: 2.5rem;
-  color: #00e5ff;
+th {
+  background: #003344;
+  letter-spacing: 1px;
 }
 
-.stat-card p {
-  margin-top: 0.5rem;
-  color: #b2ebf2;
+tr:hover {
+  background: #004466;
+  cursor: default;
 }
 
-/* REVIEWS SECTION */
-.reviews-section {
-  padding: 3rem 2rem;
-  background: #0d0d0d;
-  text-align: center;
-}
-
-.section-title {
-  font-size: 2rem;
-  margin-bottom: 2rem;
-  color: #00e5ff;
-  text-shadow: 0 0 8px #00e5ff;
-}
-
-.review-card {
-  background-color: #111;
-  border-left: 4px solid #00e5ff;
-  margin: 1rem auto;
-  max-width: 600px;
-  padding: 1.5rem;
-  color: #e0f7fa;
-  border-radius: 6px;
-  box-shadow: 0 0 10px #00e5ff33;
-}
-
-.review-card span {
-  display: block;
-  margin-top: 1rem;
-  font-style: italic;
-  color: #81d4fa;
-}
-
-/* FOOTER */
-.footer {
-  text-align: center;
-  padding: 1rem;
-  background: #000;
-  border-top: 1px solid #00e5ff;
-  color: #b2ebf2;
-  font-size: 0.9rem;
-  box-shadow: 0 -5px 10px #00e5ff22;
-}
-
-/* MEDIA QUERIES */
-@media (max-width: 768px) {
-  .nav-links {
-    flex-direction: column;
+/* ========== Responsive ========== */
+@media (max-width: 600px) {
+  nav ul {
     gap: 1rem;
   }
-
-  .stats-section {
-    flex-direction: column;
-    align-items: center;
+  form {
+    padding: 1.5rem;
   }
-
-  .hero-section {
-    padding: 2rem 1rem;
+  table {
+    font-size: 0.9rem;
   }
+}
 
-  .neon-text {
-    font-size: 2rem;
-  }
+/* ========== Message Boxes ========== */
+.message {
+  margin-top: 1rem;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  display: none;
+}
+
+.message.error {
+  color: #ff4444;
+  display: block;
+}
+
+.message.success {
+  color: #33ff33;
+  display: block;
 }
