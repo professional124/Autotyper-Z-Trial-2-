@@ -1,1 +1,0 @@
-# Captcha solver stub
