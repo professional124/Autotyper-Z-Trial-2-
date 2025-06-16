@@ -1,1 +1,455 @@
-<!-- Tasks Dashboard HTML -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chill 4 Ever Team - Nitrotype Bot Tasks</title>
+  <style>
+    /* Reset & base */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #000;
+      color: #0ff; /* neon teal */
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    a {
+      color: #0ff;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #0ff;
+      text-decoration: underline;
+    }
+
+    /* Sticky navbar */
+    nav {
+      position: sticky;
+      top: 0;
+      background: #001f2f;
+      border-bottom: 1px solid #0ff;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 999;
+    }
+    nav h1 {
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-shadow: 0 0 5px #0ff;
+      letter-spacing: 1.5px;
+    }
+    nav .links a {
+      margin-left: 1.5rem;
+      font-weight: 600;
+      font-size: 1rem;
+      position: relative;
+      padding-bottom: 4px;
+      transition: all 0.3s ease;
+    }
+    nav .links a::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 0%;
+      height: 2px;
+      background: linear-gradient(270deg, #0ff, #00f);
+      transition: width 0.3s ease;
+      border-radius: 2px;
+    }
+    nav .links a:hover::after {
+      width: 100%;
+    }
+
+    /* Main container */
+    main {
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Tasks table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      background: #001a2b;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow:
+        0 0 10px #00ffff88,
+        inset 0 0 8px #00ffffcc;
+    }
+    thead {
+      background: linear-gradient(90deg, #00ffff, #0077ff);
+      color: #000;
+      user-select: none;
+    }
+    thead th {
+      padding: 1rem;
+      text-align: left;
+      font-weight: 700;
+      letter-spacing: 1px;
+      font-size: 0.95rem;
+    }
+    tbody tr {
+      border-bottom: 1px solid #00ffff55;
+      cursor: default;
+      transition: background 0.25s ease;
+    }
+    tbody tr:hover {
+      background: #004466bb;
+      box-shadow: 0 0 10px #00ffffaa;
+    }
+    tbody td {
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      vertical-align: middle;
+      color: #0ff;
+    }
+    tbody td.status {
+      font-weight: 700;
+      text-transform: capitalize;
+      letter-spacing: 0.7px;
+      width: 120px;
+    }
+
+    /* Neon progress bar container */
+    .progress-container {
+      background: #003344;
+      border-radius: 12px;
+      overflow: hidden;
+      width: 100%;
+      height: 18px;
+      box-shadow:
+        inset 0 0 5px #00ffffaa,
+        0 0 6px #00ffffcc;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #0ff, #0077ff);
+      width: 0%;
+      border-radius: 12px;
+      transition: width 0.5s ease;
+      box-shadow:
+        0 0 8px #00ffffee,
+        inset 0 0 5px #00ffffcc;
+    }
+
+    /* Floating Add Task button */
+    #addTaskBtn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: #00ffffcc;
+      border: none;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      cursor: pointer;
+      font-size: 2rem;
+      color: #001a2b;
+      box-shadow:
+        0 0 15px #00ffffee,
+        0 0 10px #00ffffcc inset;
+      transition: background 0.3s ease, transform 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    #addTaskBtn:hover {
+      background: #00ffff;
+      transform: scale(1.1);
+      box-shadow:
+        0 0 25px #00ffffff,
+        0 0 15px #00ffffee inset;
+    }
+
+    /* Modal background overlay */
+    #modalOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    /* Modal container */
+    #modal {
+      background: #001a2b;
+      padding: 2rem;
+      border-radius: 10px;
+      width: 380px;
+      max-width: 90vw;
+      box-shadow:
+        0 0 20px #00ffffcc,
+        inset 0 0 15px #00ffffcc;
+      color: #0ff;
+      font-size: 1rem;
+      position: relative;
+    }
+    #modal h2 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+    #modal label {
+      display: block;
+      margin-bottom: 0.25rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    #modal input, #modal select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+      border: none;
+      border-radius: 5px;
+      background: #003344;
+      color: #0ff;
+      font-size: 1rem;
+      box-shadow: inset 0 0 8px #00ffffcc;
+    }
+    #modal input::placeholder {
+      color: #66ffffbb;
+    }
+    #modal button {
+      background: #00ffff;
+      color: #001a2b;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 0 12px #00ffffcc;
+      transition: background 0.3s ease;
+    }
+    #modal button:hover {
+      background: #00ccff;
+    }
+    #modalCloseBtn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      font-size: 1.4rem;
+      background: transparent;
+      border: none;
+      color: #0ff;
+      cursor: pointer;
+      font-weight: 700;
+      user-select: none;
+    }
+    #modalCloseBtn:hover {
+      color: #00ccff;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      main {
+        padding: 1rem;
+      }
+      #modal {
+        width: 95vw;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <h1>Chill 4 Ever - Bot Tasks</h1>
+    <div class="links">
+      <a href="/">Home</a>
+      <a href="/tasks">Tasks</a>
+      <a href="/modal_form">Join</a>
+      <a href="/contact">Contact</a>
+    </div>
+  </nav>
+
+  <main>
+    <h2>Current Bot Tasks</h2>
+    <table aria-label="List of Nitrotype bot tasks">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Progress</th>
+          <th>Status</th>
+          <th>Created At (UTC)</th>
+        </tr>
+      </thead>
+      <tbody id="tasksBody">
+        <!-- Filled dynamically -->
+      </tbody>
+    </table>
+  </main>
+
+  <button id="addTaskBtn" aria-label="Add new bot task" title="Add Task">+</button>
+
+  <!-- Modal overlay & content (can link to /modal_form if you want separate page) -->
+  <div id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div id="modal">
+      <button id="modalCloseBtn" aria-label="Close modal">&times;</button>
+      <h2 id="modalTitle">Add New Bot Task</h2>
+      <form id="taskForm" autocomplete="off">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Nitrotype username" required />
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Account password" required />
+
+        <label for="avg_wpm">Average WPM (10-180)</label>
+        <input type="number" id="avg_wpm" name="avg_wpm" min="10" max="180" value="75" required />
+
+        <label for="min_accuracy">Minimum Accuracy (85-97%)</label>
+        <input type="number" id="min_accuracy" name="min_accuracy" min="85" max="97" value="90" required />
+
+        <label for="how_many_races">How Many Races</label>
+        <input type="number" id="how_many_races" name="how_many_races" min="1" value="10" required />
+
+        <label for="subscription_key">Subscription Key</label>
+        <input type="text" id="subscription_key" name="subscription_key" placeholder="Your subscription key" required />
+
+        <button type="submit">Submit Task</button>
+      </form>
+      <p id="formMessage" style="color:#f66; text-align:center; margin-top:1rem; display:none;"></p>
+    </div>
+  </div>
+
+  <script>
+    const tasksBody = document.getElementById("tasksBody");
+    const addTaskBtn = document.getElementById("addTaskBtn");
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalCloseBtn = document.getElementById("modalCloseBtn");
+    const taskForm = document.getElementById("taskForm");
+    const formMessage = document.getElementById("formMessage");
+
+    // Show modal
+    addTaskBtn.addEventListener("click", () => {
+      formMessage.style.display = "none";
+      taskForm.reset();
+      modalOverlay.style.display = "flex";
+      document.getElementById("username").focus();
+    });
+
+    // Close modal
+    modalCloseBtn.addEventListener("click", () => {
+      modalOverlay.style.display = "none";
+    });
+
+    // Close modal on click outside modal
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) {
+        modalOverlay.style.display = "none";
+      }
+    });
+
+    // Format ISO date string to readable local datetime
+    function formatDate(isoString) {
+      const dt = new Date(isoString);
+      return dt.toLocaleString(undefined, { 
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      });
+    }
+
+    // Create progress bar HTML string with neon style
+    function createProgressBar(percent) {
+      return `
+        <div class="progress-container" aria-label="Progress bar ${percent}%">
+          <div class="progress-bar" style="width: ${percent}%;"></div>
+        </div>
+      `;
+    }
+
+    // Render tasks into table body
+    function renderTasks(tasks) {
+      if (!tasks || tasks.length === 0) {
+        tasksBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#0077ff;">No active tasks found</td></tr>`;
+        return;
+      }
+
+      tasksBody.innerHTML = tasks.map(task => {
+        const progressPercent = Math.min(100, (task.races_botted / task.how_many_races) * 100);
+        const createdAt = formatDate(task.created_at);
+
+        // Status with neon color coding
+        let statusColor = "#0ff";
+        if (task.status === "running") statusColor = "#00ff99";
+        else if (task.status === "queued") statusColor = "#0099ff";
+        else if (task.status === "completed") statusColor = "#33ff33";
+        else if (task.status === "failed") statusColor = "#ff4444";
+
+        return `
+          <tr tabindex="0" aria-label="Task for ${task.username}, status ${task.status}">
+            <td>${task.username}</td>
+            <td>${createProgressBar(progressPercent)}</td>
+            <td class="status" style="color:${statusColor}; font-weight: 700;">${task.status}</td>
+            <td>${createdAt}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // Fetch tasks from API and render
+    async function fetchTasks() {
+      try {
+        const res = await fetch("/api/tasks");
+        if (!res.ok) throw new Error("Failed to fetch tasks");
+        const data = await res.json();
+        renderTasks(data);
+      } catch (err) {
+        tasksBody.innerHTML = `<tr><td colspan="4" style="color:#f00; text-align:center;">Error loading tasks: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Poll tasks every 10 seconds for live updates
+    fetchTasks();
+    setInterval(fetchTasks, 10000);
+
+    // Handle task form submit
+    taskForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      formMessage.style.display = "none";
+
+      const formData = new FormData(taskForm);
+      // Convert to URL encoded for POST
+      const encoded = new URLSearchParams(formData).toString();
+
+      try {
+        const res = await fetch("/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: encoded
+        });
+        if (res.redirected) {
+          // Close modal and reload tasks on success
+          modalOverlay.style.display = "none";
+          fetchTasks();
+        } else if (!res.ok) {
+          const text = await res.text();
+          formMessage.textContent = `Error: ${text}`;
+          formMessage.style.display = "block";
+        }
+      } catch (error) {
+        formMessage.textContent = `Network error: ${error.message}`;
+        formMessage.style.display = "block";
+      }
+    });
+  </script>
+
+</body>
+</html>
