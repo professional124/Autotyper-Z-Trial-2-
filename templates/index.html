@@ -2,67 +2,88 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AutoTyper-Z | Home</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chill 4 Ever Bot - Home</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="client.js" defer></script>
 </head>
 <body>
-
-  <!-- Sticky Navbar -->
   <nav class="navbar">
-    <div class="logo">AutoTyper-Z</div>
+    <div class="logo">Chill 4 Ever Bot</div>
     <ul class="nav-links">
       <li><a href="index.html" class="active">Home</a></li>
       <li><a href="tasks.html">Tasks</a></li>
-      <li><a href="contact.html">Contact</a></li>
     </ul>
   </nav>
 
-  <!-- Hero Section -->
-  <header class="hero-section">
-    <h1 class="neon-text">Welcome to AutoTyper-Z</h1>
-    <p class="tagline">The most powerful NitroType bot on the planet 🌐</p>
-    <a href="tasks.html" class="cta-btn">Start Botting</a>
-  </header>
+  <main class="container fade-in">
+    <section class="hero">
+      <h1>Welcome to Chill 4 Ever Bot</h1>
+      <p>Automate your Nitrotype races with precision and style.</p>
+      <a href="tasks.html" class="btn btn-primary">Get Started</a>
+    </section>
 
-  <!-- Stats Section -->
-  <section class="stats-section">
-    <div class="stat-card">
-      <h2 id="racesBotted">0</h2>
-      <p>Races Botted</p>
-    </div>
-    <div class="stat-card">
-      <h2 id="accountsBotted">0</h2>
-      <p>Accounts Botted</p>
-    </div>
-    <div class="stat-card">
-      <h2 id="daysOnline">0</h2>
-      <p>Days Online</p>
-    </div>
-  </section>
+    <section class="stats">
+      <h2>Current Stats</h2>
+      <div class="stats-cards">
+        <div class="card">
+          <h3 id="racesBotted">0</h3>
+          <p>Races Botted</p>
+        </div>
+        <div class="card">
+          <h3 id="accountsBotted">0</h3>
+          <p>Accounts Botted</p>
+        </div>
+        <div class="card">
+          <h3 id="daysOnline">0</h3>
+          <p>Days Online</p>
+        </div>
+      </div>
+    </section>
 
-  <!-- Reviews Section -->
-  <section class="reviews-section">
-    <h2 class="section-title">What Our Users Say</h2>
-    <div class="review-card">
-      <p>"Got 10k races done while I slept. Insane."</p>
-      <span>- @TypeKing</span>
-    </div>
-    <div class="review-card">
-      <p>"Way smoother than any other bot. Worth every NTC."</p>
-      <span>- @SpeedFreak</span>
-    </div>
-    <div class="review-card">
-      <p>"Legit doubled my stats in one week."</p>
-      <span>- @GrindMaster</span>
-    </div>
-  </section>
+    <section class="reviews">
+      <h2>User Reviews</h2>
+      <div id="reviews-list">
+        <!-- reviews loaded dynamically -->
+      </div>
+    </section>
+  </main>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <p>&copy; 2025 AutoTyper-Z. All rights reserved.</p>
-  </footer>
+  <script>
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) throw new Error('Failed to fetch stats');
+        const data = await res.json();
+        document.getElementById('racesBotted').textContent = data.racesBotted;
+        document.getElementById('accountsBotted').textContent = data.accountsBotted;
+        document.getElementById('daysOnline').textContent = data.daysOnline;
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
+    async function loadReviews() {
+      // Dummy reviews for now
+      const reviews = [
+        { name: "Alex", text: "This bot is insane, saved me tons of time!" },
+        { name: "Jessie", text: "Smooth and reliable racing automation." },
+        { name: "Mia", text: "Support is great and it just works." },
+      ];
+
+      const container = document.getElementById('reviews-list');
+      container.innerHTML = '';
+      reviews.forEach(r => {
+        const div = document.createElement('div');
+        div.classList.add('review');
+        div.innerHTML = `<strong>${r.name}</strong><p>${r.text}</p>`;
+        container.appendChild(div);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadStats();
+      loadReviews();
+    });
+  </script>
 </body>
 </html>
