@@ -1,1 +1,22 @@
-{}
+[
+  {
+    "username": "sample_user_1",
+    "password": "samplepass1",
+    "avg_wpm": 90,
+    "min_accuracy": 90,
+    "subscription_key": "SAMPLE-KEY-123",
+    "status": "running",
+    "races_botted": 42,
+    "created_at": "2025-06-15T14:32:00Z"
+  },
+  {
+    "username": "sample_user_2",
+    "password": "samplepass2",
+    "avg_wpm": 120,
+    "min_accuracy": 95,
+    "subscription_key": "SAMPLE-KEY-456",
+    "status": "running",
+    "races_botted": 77,
+    "created_at": "2025-06-15T15:12:00Z"
+  }
+]
