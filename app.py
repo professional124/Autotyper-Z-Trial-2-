@@ -1,36 +1,46 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for
 from bot_manager import BotManager
-import threading
 
 app = Flask(__name__)
 bot_manager = BotManager()
 
-@app.route("/", methods=["GET"])
-def index():
-    # Show form + current active bots
-    bots = bot_manager.get_active_bots()
-    return render_template("index.html", bots=bots)
+# Global stats
+total_races_botted = 0
+unique_accounts_botted = set()
 
-@app.route("/start_bot", methods=["POST"])
+@app.route("/")
+def home():
+    global total_races_botted, unique_accounts_botted
+    return render_template(
+        "home.html",
+        total_races=total_races_botted,
+        total_accounts=len(unique_accounts_botted)
+    )
+
+@app.route("/start", methods=["GET", "POST"])
 def start_bot():
-    username = request.form.get("username")
-    password = request.form.get("password")
-    avg_wpm = float(request.form.get("avg_wpm", 40))
-    min_accuracy = int(request.form.get("min_accuracy", 95))
-    races = int(request.form.get("races", 1))
+    global total_races_botted, unique_accounts_botted
 
-    if not username or not password:
-        return "Username and password are required", 400
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        avg_wpm = int(request.form["avg_wpm"])
+        min_accuracy = int(request.form["min_accuracy"])
+        races = int(request.form["races"])
 
-    # Start the bot in background thread
-    bot_manager.start_bot(username, password, avg_wpm, min_accuracy, races)
+        started = bot_manager.start_bot(username, password, avg_wpm, min_accuracy, races)
+        if started:
+            unique_accounts_botted.add(username)
+            total_races_botted += races
+            return redirect(url_for("start_bot"))
+        else:
+            return render_template("start.html", error="Bot is already running for that username.", bots=bot_manager.get_active_bots())
 
-    return redirect(url_for("index"))
+    return render_template("start.html", bots=bot_manager.get_active_bots())
 
-@app.route("/api/status", methods=["GET"])
-def api_status():
-    # Return JSON of current bots and race counts
-    return jsonify(bot_manager.get_active_bots())
+@app.route("/tabs")
+def tabs():
+    return render_template("tabs.html")
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True)
