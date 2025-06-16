@@ -1,337 +1,310 @@
 import os
-import threading
 import time
+import threading
+import queue
 import random
-import json
 import logging
-from queue import Queue
-from typing import Optional
+import requests
+from typing import Optional, Dict
 
-# Simulated Nitrotype API wrapper
-# Replace with your actual Nitrotype API client or implementation
-class NitroClient:
-    def __init__(self, proxy: Optional[str] = None):
+# ---- SETUP LOGGING ----
+logging.basicConfig(
+    level=logging.DEBUG,  # Set to DEBUG for maximum verbosity
+    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# ---- CONSTANTS AND CONFIG ----
+MAX_CONCURRENT_TASKS = 3
+PROXIES_FILE = "proxies.txt"
+CAPTCHA_API_KEY = os.getenv("CAPTCHA_API_KEY")  # Put your CAPTCHA solving service key here
+SUBSCRIPTION_KEYS = {"SUBSCRIPTION_KEY_123", "SUBSCRIPTION_KEY_456"}  # Demo keys, replace as needed
+RETRY_LIMIT = 5
+MIN_WPM = 10
+MAX_WPM = 180
+MIN_ACC = 85
+MAX_ACC = 97
+
+
+# ---- NITROTYPE.JS API SIMULATION ----
+class NitrotypeAPI:
+    """
+    Simulates Nitrotype.js API integration.
+    Replace placeholders with real Nitrotype.js calls.
+    """
+    def __init__(self, username: str, password: str, proxy: Optional[str] = None):
+        self.username = username
+        self.password = password
         self.proxy = proxy
         self.logged_in = False
-        self.username = None
-    
-    def login(self, username: str, password: str) -> bool:
-        # TODO: Replace with real login using Nitrotype API
-        time.sleep(1)  # Simulate network delay
-        # Fake success/fail login logic
-        if username and password:
-            self.logged_in = True
-            self.username = username
-            return True
-        return False
-    
-    def join_race(self):
-        # TODO: Connect to Nitrotype race server, join a race
-        # Returning a dict with race text and captcha requirement for demo
-        time.sleep(1)
-        return {
-            "text": "The quick brown fox jumps over the lazy dog",
-            "captcha_required": random.choice([False, False, False, True])  # Rare captcha
-        }
-    
-    def send_keystroke(self, char: str):
-        # TODO: Send single character keystroke to Nitrotype race
-        time.sleep(0.02)  # Simulate typing speed
-    
-    def submit_race(self, typed_text: str) -> bool:
-        # TODO: Submit the typed text and return success or failure
-        time.sleep(0.5)
-        return True
-
-# Helper utilities
-def encrypt(password: str) -> str:
-    # Placeholder: Implement your own encryption
-    return password[::-1]
-
-def decrypt(enc_password: str) -> str:
-    # Placeholder: Implement your own decryption
-    return enc_password[::-1]
-
-def is_valid_key(key: str) -> bool:
-    # Placeholder: Validate subscription key
-    # You can integrate with your licensing backend here
-    return key == "VALID-SUBSCRIPTION-KEY"
-
-def get_proxy() -> Optional[str]:
-    # Placeholder: Return a proxy string if you have proxies configured
-    # e.g., "http://user:pass@proxyserver:port"
-    return None
-
-def solve_captcha(username: str, captcha_key: str) -> bool:
-    # Simulate captcha solving via external service using captcha_key
-    # Replace with your actual captcha solver API integration here
-    logging.info(f"[{username}] Solving captcha with key: {captcha_key[:5]}***")
-    time.sleep(3)  # Simulate solver delay
-    # Randomly succeed or fail captcha solve
-    success = random.random() > 0.2
-    logging.info(f"[{username}] Captcha solve {'success' if success else 'failure'}")
-    return success
-
-# Setup logging
-logging.basicConfig(
-    format='[%(asctime)s] %(levelname)s %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger("AutoTyper")
-
-# Read CAPTCHA key from environment variable
-CAPTCHA_KEY = os.getenv("CAPTCHA_KEY")
-if not CAPTCHA_KEY:
-    raise Exception("CAPTCHA_KEY environment variable not set! Set it before running the bot.")
-
-MAX_CONCURRENT_BOTS = 3
-TASKS_FILE = "tasks.json"
-
-# Thread-safe queue and dict for bot management
-active_bots = {}
-bot_queue = Queue()
-lock = threading.Lock()
-
-class Bot(threading.Thread):
-    def __init__(self, username: str, password_enc: str, avg_wpm: int, min_acc: int, num_races: int, key: str, proxy: Optional[str] = None):
-        super().__init__()
-        self.username = username
-        self.password_enc = password_enc
-        self.avg_wpm = avg_wpm
-        self.min_acc = min_acc
-        self.num_races = num_races
-        self.key = key
-        self.proxy = proxy
         self.races_completed = 0
-        self.status = "Initialized"
-        self.client = None
-        self._stop_event = threading.Event()
 
-    def decrypt_password(self) -> str:
-        return decrypt(self.password_enc)
-
-    def run(self):
-        logger.info(f"[{self.username}] Bot thread started.")
-
-        if not is_valid_key(self.key):
-            self.status = "Invalid subscription key"
-            logger.error(f"[{self.username}] Invalid subscription key. Exiting.")
-            return
-
+    def login(self) -> bool:
+        logging.debug(f"[{self.username}] Attempting to login...")
         try:
-            self.status = "Logging in"
-            self.client = NitroClient(proxy=self.proxy)
-            password = self.decrypt_password()
-            if not self.client.login(self.username, password):
-                self.status = "Login failed"
-                logger.error(f"[{self.username}] Login failed with provided credentials.")
-                return
-
-            self.status = "Racing"
-            while not self._stop_event.is_set() and self.races_completed < self.num_races:
-                race_info = self.client.join_race()
-                if not race_info:
-                    self.status = "Failed to join race"
-                    logger.error(f"[{self.username}] Failed to join a race.")
-                    break
-
-                if race_info.get("captcha_required", False):
-                    self.status = "Captcha required"
-                    logger.info(f"[{self.username}] Captcha challenge encountered.")
-                    if not solve_captcha(self.username, CAPTCHA_KEY):
-                        self.status = "Captcha solve failed"
-                        logger.error(f"[{self.username}] Failed to solve captcha. Stopping bot.")
-                        break
-                    self.status = "Captcha solved, continuing"
-
-                self.status = "Typing"
-                if not self.simulate_typing(race_info["text"]):
-                    self.status = "Race typing failed"
-                    logger.error(f"[{self.username}] Typing failed during race.")
-                    break
-
-                self.races_completed += 1
-                logger.info(f"[{self.username}] Completed race {self.races_completed}/{self.num_races}")
-                time.sleep(random.uniform(2, 4))  # Cooldown between races
-
-            self.status = "Completed" if self.races_completed == self.num_races else "Stopped"
-            logger.info(f"[{self.username}] Bot finished with status: {self.status}")
-
+            # Placeholder: Replace with actual Nitrotype.js login call
+            time.sleep(random.uniform(1.0, 1.5))  # Simulate network latency
+            if not self.username or not self.password:
+                raise ValueError("Username or password missing")
+            # Simulate successful login
+            self.logged_in = True
+            logging.info(f"[{self.username}] Login successful.")
+            return True
         except Exception as e:
-            self.status = f"Error: {str(e)}"
-            logger.exception(f"[{self.username}] Exception occurred: {str(e)}")
+            logging.error(f"[{self.username}] Login failed: {e}")
+            return False
 
-        finally:
-            self.cleanup()
+    def solve_captcha(self) -> bool:
+        if not CAPTCHA_API_KEY:
+            logging.warning(f"[{self.username}] CAPTCHA API key not set, skipping CAPTCHA solving.")
+            return True  # Assume no captcha required
+        try:
+            logging.debug(f"[{self.username}] Solving CAPTCHA with API key...")
+            # Placeholder for actual CAPTCHA solving API call
+            time.sleep(2)  # Simulate delay
+            # Pretend captcha was solved successfully
+            logging.info(f"[{self.username}] CAPTCHA solved successfully.")
+            return True
+        except Exception as e:
+            logging.error(f"[{self.username}] CAPTCHA solving failed: {e}")
+            return False
 
-    def simulate_typing(self, text: str) -> bool:
-        """Simulates human-like typing with speed and accuracy control."""
-        base_delay = 60 / (self.avg_wpm * 5)  # average seconds per char (5 chars = 1 word)
-        typed_text = ""
+    def start_race(self, avg_wpm: int, min_acc: int) -> bool:
+        if not self.logged_in:
+            logging.warning(f"[{self.username}] Cannot start race, not logged in.")
+            return False
+        logging.debug(f"[{self.username}] Starting a race at target WPM {avg_wpm} and min accuracy {min_acc}%.")
+        try:
+            # Placeholder: Simulate the race with delays and accuracy checks
+            race_duration = random.uniform(5, 10)  # seconds per race
+            time.sleep(race_duration)
+            achieved_wpm = random.uniform(max(MIN_WPM, avg_wpm - 10), min(MAX_WPM, avg_wpm + 10))
+            achieved_acc = random.uniform(min_acc, 100)
+            if achieved_acc < min_acc:
+                logging.warning(f"[{self.username}] Race failed due to low accuracy: {achieved_acc:.2f}% < {min_acc}%")
+                return False
+            self.races_completed += 1
+            logging.info(f"[{self.username}] Race completed: WPM={achieved_wpm:.2f}, Accuracy={achieved_acc:.2f}%. Total races: {self.races_completed}")
+            return True
+        except Exception as e:
+            logging.error(f"[{self.username}] Error during race: {e}")
+            return False
 
-        for char in text:
-            if self._stop_event.is_set():
-                logger.info(f"[{self.username}] Stop signal received during typing.")
+    def logout(self):
+        if self.logged_in:
+            logging.info(f"[{self.username}] Logging out.")
+            self.logged_in = False
+        else:
+            logging.debug(f"[{self.username}] Logout called but user was not logged in.")
+
+
+# ---- TASK CLASS ----
+class BotTask:
+    def __init__(self, username: str, password: str, avg_wpm: int, min_acc: int, num_races: int, subscription_key: str):
+        self.username = username
+        self.password = password
+        self.avg_wpm = max(MIN_WPM, min(MAX_WPM, avg_wpm))
+        self.min_acc = max(MIN_ACC, min(MAX_ACC, min_acc))
+        self.num_races = num_races
+        self.subscription_key = subscription_key
+        self.races_done = 0
+        self.active = False
+        self.failed_attempts = 0
+        self.proxy = None  # Will assign from proxy pool later
+
+
+# ---- BOT MANAGER ----
+class AutoTyperBotManager:
+    def __init__(self):
+        self.task_queue = queue.Queue()
+        self.active_tasks: Dict[str, BotTask] = {}
+        self.lock = threading.Lock()
+        self.proxies = self.load_proxies(PROXIES_FILE)
+        self.running = True
+
+        self.total_races_botted = 0
+        self.total_accounts_botted = 0
+        self.start_time = time.time()
+
+        logging.info("AutoTyperBotManager initialized.")
+
+    def load_proxies(self, filename: str) -> list:
+        proxies = []
+        if os.path.isfile(filename):
+            with open(filename, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        proxies.append(line)
+            logging.info(f"Loaded {len(proxies)} proxies from {filename}.")
+        else:
+            logging.warning(f"Proxy file {filename} not found. Proceeding without proxies.")
+        return proxies
+
+    def validate_subscription(self, key: str) -> bool:
+        valid = key in SUBSCRIPTION_KEYS
+        if not valid:
+            logging.warning(f"Invalid subscription key: {key}")
+        return valid
+
+    def assign_proxy(self) -> Optional[str]:
+        if not self.proxies:
+            return None
+        # Rotate proxies by popping first and appending to the end (round-robin)
+        proxy = self.proxies.pop(0)
+        self.proxies.append(proxy)
+        logging.debug(f"Assigned proxy {proxy}")
+        return proxy
+
+    def add_task(self, task: BotTask) -> bool:
+        if not self.validate_subscription(task.subscription_key):
+            logging.error(f"[{task.username}] Subscription key invalid.")
+            return False
+        with self.lock:
+            if task.username in self.active_tasks or any(t.username == task.username for t in list(self.task_queue.queue)):
+                logging.warning(f"[{task.username}] Task already running or queued.")
                 return False
 
-            # Simulate accuracy (sometimes mistype)
-            if random.random() > (self.min_acc / 100):
-                mistake = random.choice("abcdefghijklmnopqrstuvwxyz ")
-                self.client.send_keystroke(mistake)
-                typed_text += mistake
+            if len(self.active_tasks) < MAX_CONCURRENT_TASKS:
+                logging.info(f"[{task.username}] Starting task immediately.")
+                task.proxy = self.assign_proxy()
+                self.active_tasks[task.username] = task
+                threading.Thread(target=self._run_task, args=(task,), daemon=True).start()
             else:
-                self.client.send_keystroke(char)
-                typed_text += char
+                logging.info(f"[{task.username}] Task queued (max concurrency reached).")
+                self.task_queue.put(task)
+        return True
 
-            # Randomize typing delay a bit for realism
-            time.sleep(base_delay * random.uniform(0.8, 1.3))
+    def _run_task(self, task: BotTask):
+        task.active = True
+        api = NitrotypeAPI(task.username, task.password, proxy=task.proxy)
 
-        # Submit race and return success status
-        return self.client.submit_race(typed_text)
+        if not api.login():
+            logging.error(f"[{task.username}] Login failed, task aborted.")
+            self._finish_task(task)
+            return
 
-    def stop(self):
-        self._stop_event.set()
-        self.status = "Stopped"
-        logger.info(f"[{self.username}] Bot stop requested.")
+        for i in range(task.num_races):
+            if not task.active:
+                logging.info(f"[{task.username}] Task stopped externally.")
+                break
 
-    def cleanup(self):
-        # Called when bot finishes or stops to clean up and persist state
-        with lock:
-            if self.username in active_bots:
-                del active_bots[self.username]
-            self.persist_tasks()
-            self.start_next_queued_bot()
+            # CAPTCHA solving
+            if not api.solve_captcha():
+                logging.error(f"[{task.username}] CAPTCHA solving failed, retrying...")
+                task.failed_attempts += 1
+                if task.failed_attempts > RETRY_LIMIT:
+                    logging.error(f"[{task.username}] Retry limit exceeded, aborting task.")
+                    break
+                time.sleep(5)
+                continue
 
-    @staticmethod
-    def persist_tasks():
-        with lock:
-            tasks_data = {u: bot.to_dict() for u, bot in active_bots.items()}
-            with open(TASKS_FILE, "w") as f:
-                json.dump(tasks_data, f, indent=2)
-            logger.info("Saved active bot tasks to file.")
+            success = api.start_race(task.avg_wpm, task.min_acc)
+            if not success:
+                task.failed_attempts += 1
+                logging.warning(f"[{task.username}] Race attempt failed (attempt {task.failed_attempts}). Retrying...")
+                if task.failed_attempts > RETRY_LIMIT:
+                    logging.error(f"[{task.username}] Retry limit exceeded during races, aborting.")
+                    break
+                time.sleep(3)
+                continue
 
-    @staticmethod
-    def start_next_queued_bot():
-        with lock:
-            if not bot_queue.empty() and len(active_bots) < MAX_CONCURRENT_BOTS:
-                next_bot = bot_queue.get()
-                active_bots[next_bot.username] = next_bot
-                next_bot.start()
-                logger.info(f"Started queued bot: {next_bot.username}")
+            task.races_done += 1
+            with self.lock:
+                self.total_races_botted += 1
 
-    def to_dict(self):
+            logging.info(f"[{task.username}] Completed race {task.races_done}/{task.num_races}.")
+
+        api.logout()
+        self._finish_task(task)
+
+    def _finish_task(self, task: BotTask):
+        logging.info(f"[{task.username}] Task finished. Total races completed: {task.races_done}.")
+        with self.lock:
+            self.active_tasks.pop(task.username, None)
+            self.total_accounts_botted += 1
+            if not self.task_queue.empty():
+                next_task: BotTask = self.task_queue.get()
+                logging.info(f"[{next_task.username}] Dequeued task, starting now.")
+                next_task.proxy = self.assign_proxy()
+                self.active_tasks[next_task.username] = next_task
+                threading.Thread(target=self._run_task, args=(next_task,), daemon=True).start()
+
+    def stop_task(self, username: str):
+        with self.lock:
+            task = self.active_tasks.get(username)
+            if task:
+                task.active = False
+                logging.info(f"[{username}] Stop requested for active task.")
+            else:
+                # Also remove from queue if waiting
+                removed = False
+                temp_queue = queue.Queue()
+                while not self.task_queue.empty():
+                    t = self.task_queue.get()
+                    if t.username == username:
+                        logging.info(f"[{username}] Removed task from queue.")
+                        removed = True
+                        continue
+                    temp_queue.put(t)
+                self.task_queue = temp_queue
+                if not removed:
+                    logging.warning(f"[{username}] No active or queued task found to stop.")
+
+    def get_stats(self) -> Dict[str, int]:
+        uptime = int(time.time() - self.start_time)
         return {
-            "username": self.username,
-            "password_enc": self.password_enc,
-            "avg_wpm": self.avg_wpm,
-            "min_acc": self.min_acc,
-            "num_races": self.num_races,
-            "key": self.key,
-            "proxy": self.proxy,
-            "races_completed": self.races_completed,
-            "status": self.status
+            "total_races_botted": self.total_races_botted,
+            "total_accounts_botted": self.total_accounts_botted,
+            "active_tasks": len(self.active_tasks),
+            "queued_tasks": self.task_queue.qsize(),
+            "uptime_seconds": uptime
         }
 
-    @classmethod
-    def from_dict(cls, data):
-        bot = cls(
-            username=data["username"],
-            password_enc=data["password_enc"],
-            avg_wpm=data["avg_wpm"],
-            min_acc=data["min_acc"],
-            num_races=data["num_races"],
-            key=data["key"],
-            proxy=data.get("proxy")
-        )
-        bot.races_completed = data.get("races_completed", 0)
-        bot.status = data.get("status", "Initialized")
-        return bot
-
-def add_task(data: dict) -> str:
-    username = data["username"]
-    with lock:
-        if username in active_bots:
-            return "Bot is already running for this username."
-
-        if len(active_bots) >= MAX_CONCURRENT_BOTS:
-            # Queue the task
-            proxy = get_proxy()
-            bot = Bot(
-                username=username,
-                password_enc=encrypt(data["password"]),
-                avg_wpm=int(data["avg_wpm"]),
-                min_acc=int(data["min_acc"]),
-                num_races=int(data["num_races"]),
-                key=data["key"],
-                proxy=proxy
-            )
-            bot_queue.put(bot)
-            logger.info(f"Queued new bot for user: {username}")
-            return "Max bots running. Your task has been queued."
-
-        # Start the bot immediately
-        proxy = get_proxy()
-        bot = Bot(
-            username=username,
-            password_enc=encrypt(data["password"]),
-            avg_wpm=int(data["avg_wpm"]),
-            min_acc=int(data["min_acc"]),
-            num_races=int(data["num_races"]),
-            key=data["key"],
-            proxy=proxy
-        )
-        active_bots[username] = bot
-        bot.start()
-        logger.info(f"Started bot for user: {username}")
-        return "Bot started successfully."
-
-def stop_task(username: str) -> str:
-    with lock:
-        if username not in active_bots:
-            return "No active bot found for this username."
-        bot = active_bots[username]
-        bot.stop()
-        del active_bots[username]
-        Bot.start_next_queued_bot()
-        logger.info(f"Stopped bot for user: {username}")
-        return "Bot stopped."
-
-def get_status() -> dict:
-    with lock:
-        return {
-            username: {
-                "status": bot.status,
-                "races_completed": bot.races_completed,
-                "num_races": bot.num_races,
-                "proxy": bot.proxy
+    def get_active_tasks(self) -> Dict[str, Dict]:
+        with self.lock:
+            return {
+                username: {
+                    "races_done": task.races_done,
+                    "num_races": task.num_races,
+                    "avg_wpm": task.avg_wpm,
+                    "min_acc": task.min_acc,
+                    "proxy": task.proxy,
+                }
+                for username, task in self.active_tasks.items()
             }
-            for username, bot in active_bots.items()
-        }
 
-def load_tasks():
-    if not os.path.exists(TASKS_FILE):
-        return
-    with open(TASKS_FILE, "r") as f:
-        tasks = json.load(f)
-    for username, data in tasks.items():
-        bot = Bot.from_dict(data)
-        with lock:
-            active_bots[username] = bot
-        bot.start()
-    logger.info("Loaded saved tasks and restarted bots.")
+    def shutdown(self):
+        logging.info("Shutting down AutoTyperBotManager...")
+        self.running = False
+        with self.lock:
+            for task in self.active_tasks.values():
+                task.active = False
 
+
+# ---- MAIN ENTRY POINT ----
 if __name__ == "__main__":
-    logger.info("Starting AutoTyper bot manager...")
-    load_tasks()
-    # Main thread can handle CLI or API server integration
-    # For demo, just keep the script running
+    manager = AutoTyperBotManager()
+
+    # Sample tasks for testing
+    sample_tasks = [
+        BotTask("user1", "pass1", 90, 90, 5, "SUBSCRIPTION_KEY_123"),
+        BotTask("user2", "pass2", 85, 85, 3, "SUBSCRIPTION_KEY_456"),
+        BotTask("user3", "pass3", 100, 95, 10, "SUBSCRIPTION_KEY_123"),
+        BotTask("user4", "pass4", 75, 90, 7, "INVALID_KEY")  # Should be rejected
+    ]
+
+    for task in sample_tasks:
+        added = manager.add_task(task)
+        logging.info(f"Task for {task.username} added: {added}")
+
     try:
-        while True:
-            time.sleep(5)
-            with lock:
-                logger.info(f"Active bots: {list(active_bots.keys())}, Queue size: {bot_queue.qsize()}")
+        while manager.running:
+            stats = manager.get_stats()
+            logging.info(f"Bot stats: {stats}")
+            active = manager.get_active_tasks()
+            logging.debug(f"Active tasks: {active}")
+            time.sleep(10)  # Main thread loop delay
     except KeyboardInterrupt:
-        logger.info("Shutting down all bots...")
-        with lock:
-            for bot in list(active_bots.values()):
-                bot.stop()
+        manager.shutdown()
+        logging.info("Bot manager terminated by user.")
