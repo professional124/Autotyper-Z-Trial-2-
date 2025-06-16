@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}AutoTyper-Z{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="{{ url_for('home') }}" class="nav-logo">AutoTyper-Z</a>
+      <ul class="nav-menu">
+        <li><a href="{{ url_for('home') }}">Home</a></li>
+        <li><a href="{{ url_for('start_bot') }}">Start Bot</a></li>
+        <li><a href="{{ url_for('tabs') }}">Tabs</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>© 2025 AutoTyper-Z | Built with ❤️ by Axion & ChatGPT</p>
+  </footer>
+</body>
+</html>
