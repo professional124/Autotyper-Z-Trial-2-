@@ -1,396 +1,390 @@
-from flask import Flask, render_template_string, request, jsonify
-from threading import Thread
-import re
-import logging
-
-# Import the big bot manager class from your bot.py
-from bot import AutoTyperBotManager, BotTask
+import os
+import json
+import threading
+import time
+import uuid
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
 
 app = Flask(__name__)
-manager = AutoTyperBotManager()
 
-# Enable debug logging for Flask app
-logging.basicConfig(level=logging.DEBUG)
+# --- Config & Constants ---
+TASKS_FILE = "task_data.json"
+KEYS_FILE = "valid_keys.json"
+MAX_TASKS_PER_KEY = 3
+MAX_CONCURRENT_TASKS = 3
+TASK_STATUS_QUEUED = "queued"
+TASK_STATUS_RUNNING = "running"
+TASK_STATUS_COMPLETED = "completed"
+TASK_STATUS_FAILED = "failed"
+TASK_PURGE_DAYS = 7
 
-# -------------------
-# Simple in-memory reviews store (replace with DB or file in real)
-REVIEWS = [
-    {"user": "Speedster99", "review": "This bot boosted my races like crazy! 10/10."},
-    {"user": "TyperQueen", "review": "Easy to use, very reliable and accurate."},
-    {"user": "RaceMaster", "review": "Keeps running smoothly for days without a hitch."},
-]
+# Locks for thread safety on shared files
+file_lock = threading.Lock()
 
-# -------------------
-# Helper: Validate subscription key format (simple regex, tweak as needed)
-def is_valid_subscription_key(key: str) -> bool:
-    # Only alphanumeric and underscores allowed, length 6-30 for example
-    return bool(re.fullmatch(r"\w{6,30}", key))
+# In-memory thread pool for task runners
+running_threads = []
+running_threads_lock = threading.Lock()
+
+# ==================== Helper Classes & Functions ====================
+
+class TaskManager:
+    """
+    Manages the lifecycle of tasks: add, update, save/load from disk,
+    purge old tasks, concurrency control, and logging.
+    """
+    
+    def __init__(self, tasks_file=TASKS_FILE):
+        self.tasks_file = tasks_file
+        self.lock = file_lock  # Use shared lock for all file I/O
+
+    def load_tasks(self):
+        with self.lock:
+            if not os.path.exists(self.tasks_file):
+                return []
+            with open(self.tasks_file, "r") as f:
+                try:
+                    return json.load(f)
+                except json.JSONDecodeError:
+                    return []
+
+    def save_tasks(self, tasks):
+        with self.lock:
+            with open(self.tasks_file, "w") as f:
+                json.dump(tasks, f, indent=2)
+
+    def add_task(self, task):
+        tasks = self.load_tasks()
+        tasks.append(task)
+        self.save_tasks(tasks)
+
+    def update_task(self, task_id, **kwargs):
+        tasks = self.load_tasks()
+        updated = False
+        for task in tasks:
+            if task["id"] == task_id:
+                for k, v in kwargs.items():
+                    task[k] = v
+                updated = True
+                break
+        if updated:
+            self.save_tasks(tasks)
+        return updated
+
+    def get_task(self, task_id):
+        tasks = self.load_tasks()
+        for task in tasks:
+            if task["id"] == task_id:
+                return task
+        return None
+
+    def find_tasks_by_key(self, subscription_key, active_only=True):
+        tasks = self.load_tasks()
+        if active_only:
+            return [t for t in tasks if t.get("subscription_key") == subscription_key and t["status"] in [TASK_STATUS_QUEUED, TASK_STATUS_RUNNING]]
+        else:
+            return [t for t in tasks if t.get("subscription_key") == subscription_key]
+
+    def purge_old_tasks(self):
+        """
+        Remove tasks that are completed or failed and older than TASK_PURGE_DAYS
+        """
+        tasks = self.load_tasks()
+        now = datetime.utcnow()
+        new_tasks = []
+        for t in tasks:
+            created = datetime.fromisoformat(t["created_at"].replace("Z", ""))
+            age_days = (now - created).days
+            if t["status"] in [TASK_STATUS_COMPLETED, TASK_STATUS_FAILED] and age_days >= TASK_PURGE_DAYS:
+                # Skip old completed/failed tasks
+                continue
+            new_tasks.append(t)
+        if len(new_tasks) != len(tasks):
+            self.save_tasks(new_tasks)
+
+    def total_stats(self):
+        """
+        Compute overall stats for homepage display
+        """
+        tasks = self.load_tasks()
+        total_races = sum(t.get("races_botted", 0) for t in tasks)
+        total_accounts = len(tasks)
+        days_online = (datetime.utcnow() - datetime(2024, 12, 1)).days
+        return {
+            "total_races": total_races,
+            "total_accounts": total_accounts,
+            "days_online": days_online
+        }
+
+    def get_all_tasks(self):
+        return self.load_tasks()
 
 
-# -------------------
-# ROUTES
+class SubscriptionManager:
+    """
+    Manages subscription keys and usage limits.
+    """
+    def __init__(self, keys_file=KEYS_FILE):
+        self.keys_file = keys_file
+        self.lock = file_lock
 
-# Homepage - Info, bot stats, and reviews
+    def load_keys(self):
+        with self.lock:
+            if not os.path.exists(self.keys_file):
+                return []
+            with open(self.keys_file, "r") as f:
+                try:
+                    return json.load(f)
+                except json.JSONDecodeError:
+                    return []
+
+    def is_valid_key(self, key):
+        keys = self.load_keys()
+        return key in keys
+
+    def can_use_key(self, key, task_manager: TaskManager):
+        active_tasks = task_manager.find_tasks_by_key(key, active_only=True)
+        if len(active_tasks) >= MAX_TASKS_PER_KEY:
+            return False
+        return True
+
+
+def generate_task_id():
+    return str(uuid.uuid4())
+
+def iso_now():
+    return datetime.utcnow().isoformat() + "Z"
+
+# ==================== Task Runner Logic ====================
+
+def simulate_typing_task(task_id, task_manager: TaskManager):
+    """
+    Simulate the bot running typing races. This function runs in a background thread.
+    """
+    print(f"[TaskRunner] Starting task {task_id}")
+    while True:
+        task = task_manager.get_task(task_id)
+        if not task:
+            print(f"[TaskRunner] Task {task_id} disappeared, exiting.")
+            break
+
+        status = task["status"]
+        if status in [TASK_STATUS_COMPLETED, TASK_STATUS_FAILED]:
+            print(f"[TaskRunner] Task {task_id} finished with status {status}")
+            break
+
+        if status == TASK_STATUS_QUEUED:
+            # Mark as running and add log
+            task_manager.update_task(task_id,
+                                     status=TASK_STATUS_RUNNING,
+                                     logs=task["logs"] + [{
+                                        "timestamp": iso_now(),
+                                        "message": "Task started running"
+                                     }])
+            continue
+
+        # If running, simulate typing races
+        try:
+            races_done = task.get("races_botted", 0)
+            total_races = task["how_many_races"]
+
+            if races_done < total_races:
+                # Simulate race time delay
+                time.sleep(4)  # 4 seconds per race for demo
+
+                # Update race count and logs
+                new_log = {
+                    "timestamp": iso_now(),
+                    "message": f"Completed race {races_done + 1}/{total_races}"
+                }
+                new_races_botted = races_done + 1
+                updated_logs = task["logs"] + [new_log]
+
+                task_manager.update_task(task_id, races_botted=new_races_botted, logs=updated_logs)
+            else:
+                # Completed all races
+                new_log = {
+                    "timestamp": iso_now(),
+                    "message": "Task completed successfully"
+                }
+                updated_logs = task["logs"] + [new_log]
+
+                task_manager.update_task(task_id, status=TASK_STATUS_COMPLETED, logs=updated_logs)
+                break
+        except Exception as e:
+            new_log = {
+                "timestamp": iso_now(),
+                "message": f"Error occurred: {str(e)}"
+            }
+            task_manager.update_task(task_id, status=TASK_STATUS_FAILED, logs=task["logs"] + [new_log])
+            break
+
+    # Remove from running threads list on exit
+    with running_threads_lock:
+        for t in running_threads:
+            if t.name == task_id:
+                running_threads.remove(t)
+                print(f"[TaskRunner] Removed thread for task {task_id}")
+                break
+    print(f"[TaskRunner] Exiting task {task_id}")
+
+def start_task_threads(task_manager: TaskManager):
+    """
+    Start new threads for queued tasks if under concurrency limit.
+    """
+    with running_threads_lock:
+        tasks = task_manager.get_all_tasks()
+        running_count = len(running_threads)
+
+        for task in tasks:
+            if task["status"] == TASK_STATUS_QUEUED and running_count < MAX_CONCURRENT_TASKS:
+                task_id = task["id"]
+                # Check if thread already running
+                if any(t.name == task_id for t in running_threads):
+                    continue
+
+                thread = threading.Thread(target=simulate_typing_task, args=(task_id, task_manager), name=task_id, daemon=True)
+                thread.start()
+                running_threads.append(thread)
+                running_count += 1
+                print(f"[TaskRunner] Spawned thread for task {task_id}")
+
+# ==================== Validation & Utilities ====================
+
+def validate_task_form(form):
+    """
+    Validate submitted form data for creating a new task.
+    Returns (is_valid:bool, message:str)
+    """
+    username = form.get("username", "").strip()
+    password = form.get("password", "").strip()
+    avg_wpm = form.get("avg_wpm")
+    min_accuracy = form.get("min_accuracy")
+    how_many_races = form.get("how_many_races")
+    subscription_key = form.get("subscription_key", "").strip()
+
+    if not username:
+        return False, "Username is required"
+    if not password:
+        return False, "Password is required"
+
+    try:
+        avg_wpm = int(avg_wpm)
+        if not (10 <= avg_wpm <= 180):
+            return False, "Average WPM must be between 10 and 180"
+    except:
+        return False, "Invalid Average WPM value"
+
+    try:
+        min_accuracy = int(min_accuracy)
+        if not (85 <= min_accuracy <= 97):
+            return False, "Minimum accuracy must be between 85 and 97"
+    except:
+        return False, "Invalid Minimum Accuracy value"
+
+    try:
+        how_many_races = int(how_many_races)
+        if how_many_races <= 0:
+            return False, "How Many Races must be a positive integer"
+    except:
+        return False, "Invalid How Many Races value"
+
+    if not subscription_key:
+        return False, "Subscription key is required"
+
+    return True, None
+
+# ==================== Flask Routes ====================
+
+task_manager = TaskManager()
+subscription_manager = SubscriptionManager()
+
 @app.route("/")
 def home():
-    stats = manager.get_stats()
-    # Simple standalone HTML page with embedded stats and reviews
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>AutoTyper-Z Bot - Home</title>
-        <style>
-            body {{ background-color: #000; color: #0ff; font-family: Arial, sans-serif; }}
-            .container {{ max-width: 800px; margin: auto; padding: 20px; }}
-            h1 {{ text-align: center; }}
-            .stats, .reviews {{ background: #111; border-radius: 8px; padding: 15px; margin-bottom: 20px; }}
-            .review {{ border-bottom: 1px solid #222; padding: 10px 0; }}
-            .review:last-child {{ border-bottom: none; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>AutoTyper-Z Nitrotype Bot</h1>
-            <p>The most reliable Nitrotype bot with customizable speed, accuracy, and proxy support.</p>
-            <h2>Pricing</h2>
-            <p><strong>Cost:</strong> 500 NTC per subscription</p>
-            <div class="stats">
-                <h3>Bot Stats</h3>
-                <ul>
-                    <li>Total Races Botted: {stats['total_races_botted']}</li>
-                    <li>Total Accounts Botted: {stats['total_accounts_botted']}</li>
-                    <li>Days Online: {stats['uptime_seconds'] // 86400}</li>
-                </ul>
-            </div>
-            <div class="reviews">
-                <h3>User Reviews</h3>
-                {"".join(f'<div class="review"><strong>{r["user"]}</strong>: {r["review"]}</div>' for r in REVIEWS)}
-            </div>
-            <p>Go to the <a href="/tasks">Tasks Page</a> to view and add tasks.</p>
-        </div>
-    </body>
-    </html>
-    """
-    return html
+    task_manager.purge_old_tasks()
+    stats = task_manager.total_stats()
+    return render_template("index.html", stats=stats)
 
-
-# Tasks page - show active and queued tasks + add task modal
 @app.route("/tasks")
-def tasks():
-    html = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>AutoTyper-Z Bot - Tasks</title>
-        <style>
-            body { background-color: #000; color: #0ff; font-family: Arial, sans-serif; }
-            .container { max-width: 900px; margin: auto; padding: 20px; }
-            h1 { text-align: center; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #0ff; padding: 8px; text-align: center; }
-            th { background-color: #022; }
-            tr:nth-child(even) { background-color: #011; }
-            button { background-color: #0ff; border: none; color: #000; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 6px; }
-            button:hover { background-color: #0cc; }
-            #addTaskBtn { position: fixed; bottom: 30px; right: 30px; }
-            /* Modal styles */
-            #modalOverlay {
-                display: none;
-                position: fixed;
-                top: 0; left: 0;
-                width: 100%; height: 100%;
-                background-color: rgba(0,0,0,0.85);
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-            }
-            #modalContent {
-                background: #111;
-                padding: 20px;
-                border-radius: 10px;
-                width: 350px;
-                color: #0ff;
-            }
-            input, select {
-                width: 100%;
-                margin-bottom: 15px;
-                padding: 8px;
-                background: #222;
-                border: 1px solid #0ff;
-                color: #0ff;
-                border-radius: 5px;
-            }
-            label { font-weight: bold; margin-bottom: 5px; display: block; }
-            .error { color: #f66; margin-bottom: 10px; }
-            #closeModalBtn {
-                background-color: #f00;
-                color: #fff;
-                border: none;
-                padding: 5px 10px;
-                float: right;
-                cursor: pointer;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Active & Queued Bot Tasks</h1>
-            <table id="tasksTable">
-                <thead>
-                    <tr>
-                        <th>Username</th>
-                        <th>Races Done</th>
-                        <th>Total Races</th>
-                        <th>Avg WPM</th>
-                        <th>Min Accuracy</th>
-                        <th>Proxy</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tasksBody">
-                    <!-- Filled by JS -->
-                </tbody>
-            </table>
-            <button id="addTaskBtn">Add Task</button>
-        </div>
+def tasks_page():
+    return render_template("tasks.html")
 
-        <!-- Modal -->
-        <div id="modalOverlay">
-            <div id="modalContent">
-                <button id="closeModalBtn">X</button>
-                <h2>Add New Task</h2>
-                <div id="errorMsg" class="error"></div>
-                <form id="taskForm">
-                    <label for="username">Username</label>
-                    <input id="username" name="username" type="text" required />
-
-                    <label for="password">Password</label>
-                    <input id="password" name="password" type="password" required />
-
-                    <label for="avg_wpm">Average WPM (10-180)</label>
-                    <input id="avg_wpm" name="avg_wpm" type="number" min="10" max="180" value="80" required />
-
-                    <label for="min_acc">Minimum Accuracy % (85-97)</label>
-                    <input id="min_acc" name="min_acc" type="number" min="85" max="97" value="90" required />
-
-                    <label for="num_races">Number of Races</label>
-                    <input id="num_races" name="num_races" type="number" min="1" max="50" value="5" required />
-
-                    <label for="subscription_key">Subscription Key</label>
-                    <input id="subscription_key" name="subscription_key" type="text" required />
-
-                    <button type="submit">Submit Task</button>
-                </form>
-            </div>
-        </div>
-
-        <script>
-            const addTaskBtn = document.getElementById("addTaskBtn");
-            const modalOverlay = document.getElementById("modalOverlay");
-            const closeModalBtn = document.getElementById("closeModalBtn");
-            const taskForm = document.getElementById("taskForm");
-            const errorMsg = document.getElementById("errorMsg");
-            const tasksBody = document.getElementById("tasksBody");
-
-            // Show modal
-            addTaskBtn.addEventListener("click", () => {
-                errorMsg.textContent = "";
-                taskForm.reset();
-                modalOverlay.style.display = "flex";
-            });
-
-            // Close modal
-            closeModalBtn.addEventListener("click", () => {
-                modalOverlay.style.display = "none";
-            });
-
-            // Submit form
-            taskForm.addEventListener("submit", async (e) => {
-                e.preventDefault();
-                errorMsg.textContent = "";
-
-                const formData = {
-                    username: taskForm.username.value.trim(),
-                    password: taskForm.password.value.trim(),
-                    avg_wpm: parseInt(taskForm.avg_wpm.value),
-                    min_acc: parseInt(taskForm.min_acc.value),
-                    num_races: parseInt(taskForm.num_races.value),
-                    subscription_key: taskForm.subscription_key.value.trim()
-                };
-
-                // Basic client validation
-                if (!formData.username || !formData.password) {
-                    errorMsg.textContent = "Username and password are required.";
-                    return;
-                }
-                if (formData.avg_wpm < 10 || formData.avg_wpm > 180) {
-                    errorMsg.textContent = "Average WPM must be between 10 and 180.";
-                    return;
-                }
-                if (formData.min_acc < 85 || formData.min_acc > 97) {
-                    errorMsg.textContent = "Minimum accuracy must be between 85% and 97%.";
-                    return;
-                }
-                if (formData.num_races < 1 || formData.num_races > 50) {
-                    errorMsg.textContent = "Number of races must be between 1 and 50.";
-                    return;
-                }
-                if (!formData.subscription_key) {
-                    errorMsg.textContent = "Subscription key is required.";
-                    return;
-                }
-
-                // Send to backend
-                try {
-                    const res = await fetch("/api/add_task", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(formData)
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        modalOverlay.style.display = "none";
-                        fetchTasks();
-                    } else {
-                        errorMsg.textContent = data.error || "Unknown error.";
-                    }
-                } catch (err) {
-                    errorMsg.textContent = "Failed to submit task.";
-                }
-            });
-
-            // Fetch and display tasks every 5 seconds
-            async function fetchTasks() {
-                try {
-                    const res = await fetch("/api/tasks");
-                    const data = await res.json();
-                    tasksBody.innerHTML = "";
-                    data.tasks.forEach(task => {
-                        const tr = document.createElement("tr");
-                        tr.innerHTML = `
-                            <td>${task.username}</td>
-                            <td>${task.races_done}</td>
-                            <td>${task.num_races}</td>
-                            <td>${task.avg_wpm}</td>
-                            <td>${task.min_acc}%</td>
-                            <td>${task.proxy || "None"}</td>
-                            <td><button onclick="stopTask('${task.username}')">Stop</button></td>
-                        `;
-                        tasksBody.appendChild(tr);
-                    });
-                } catch (e) {
-                    console.error("Failed to fetch tasks:", e);
-                }
-            }
-
-            // Stop a running task
-            async function stopTask(username) {
-                if (!confirm(`Stop task for user ${username}?`)) return;
-                try {
-                    const res = await fetch("/api/stop_task", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ username })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        fetchTasks();
-                    } else {
-                        alert(data.error || "Failed to stop task.");
-                    }
-                } catch (e) {
-                    alert("Error stopping task.");
-                }
-            }
-
-            // Initial fetch
-            fetchTasks();
-
-            // Refresh tasks every 5 seconds
-            setInterval(fetchTasks, 5000);
-        </script>
-    </body>
-    </html>
-    """
-    return html
-
-
-# -------------------
-# API ENDPOINTS
-
-@app.route("/api/add_task", methods=["POST"])
-def api_add_task():
-    data = request.get_json(force=True)
-    required_fields = ["username", "password", "avg_wpm", "min_acc", "num_races", "subscription_key"]
-    if not all(field in data for field in required_fields):
-        return jsonify(success=False, error="Missing required fields.")
-
-    username = data["username"].strip()
-    password = data["password"].strip()
-    try:
-        avg_wpm = int(data["avg_wpm"])
-        min_acc = int(data["min_acc"])
-        num_races = int(data["num_races"])
-    except ValueError:
-        return jsonify(success=False, error="WPM, accuracy, and races must be integers.")
-
-    subscription_key = data["subscription_key"].strip()
-
-    # Validate inputs on server-side
-    if not username or not password:
-        return jsonify(success=False, error="Username and password are required.")
-    if not (MIN_WPM <= avg_wpm <= MAX_WPM):
-        return jsonify(success=False, error=f"Average WPM must be between {MIN_WPM} and {MAX_WPM}.")
-    if not (MIN_ACC <= min_acc <= MAX_ACC):
-        return jsonify(success=False, error=f"Minimum accuracy must be between {MIN_ACC}% and {MAX_ACC}%.")
-    if not (1 <= num_races <= 50):
-        return jsonify(success=False, error="Number of races must be between 1 and 50.")
-    if not is_valid_subscription_key(subscription_key):
-        return jsonify(success=False, error="Invalid subscription key format.")
-
-    task = BotTask(username, password, avg_wpm, min_acc, num_races, subscription_key)
-    added = manager.add_task(task)
-    if added:
-        return jsonify(success=True)
-    else:
-        return jsonify(success=False, error="Failed to add task. Check if subscription key is valid or task is duplicate.")
-
+@app.route("/modal_form")
+def modal_form_page():
+    return render_template("modal_form.html")
 
 @app.route("/api/tasks", methods=["GET"])
-def api_tasks():
-    tasks = []
-    active = manager.get_active_tasks()
-    # Convert active tasks dict to list for frontend
-    for username, info in active.items():
-        tasks.append({
-            "username": username,
-            "races_done": info.get("races_done", 0),
-            "num_races": info.get("num_races", 0),
-            "avg_wpm": info.get("avg_wpm", 0),
-            "min_acc": info.get("min_acc", 0),
-            "proxy": info.get("proxy")
-        })
-    return jsonify(tasks=tasks)
+def api_get_tasks():
+    tasks = task_manager.get_all_tasks()
+    return jsonify(tasks)
 
+@app.route("/api/stats", methods=["GET"])
+def api_get_stats():
+    stats = task_manager.total_stats()
+    return jsonify(stats)
 
-@app.route("/api/stop_task", methods=["POST"])
-def api_stop_task():
-    data = request.get_json(force=True)
-    username = data.get("username", "").strip()
-    if not username:
-        return jsonify(success=False, error="Username is required.")
-    manager.stop_task(username)
-    return jsonify(success=True)
+@app.route("/api/task/<task_id>/logs", methods=["GET"])
+def api_task_logs(task_id):
+    task = task_manager.get_task(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    return jsonify(task.get("logs", []))
 
+@app.route("/submit", methods=["POST"])
+def submit_task():
+    form = request.form
+    is_valid, msg = validate_task_form(form)
+    if not is_valid:
+        return abort(400, msg)
 
-# -------------------
-# RUN THE APP
+    subscription_key = form.get("subscription_key", "").strip()
+    if not subscription_manager.is_valid_key(subscription_key):
+        return abort(403, "Invalid subscription key")
+
+    if not subscription_manager.can_use_key(subscription_key, task_manager):
+        return abort(403, f"Subscription key usage limit reached (max {MAX_TASKS_PER_KEY} active tasks)")
+
+    # Create the new task dictionary
+    new_task = {
+        "id": generate_task_id(),
+        "username": form.get("username").strip(),
+        "password": form.get("password").strip(),
+        "avg_wpm": int(form.get("avg_wpm")),
+        "min_accuracy": int(form.get("min_accuracy")),
+        "how_many_races": int(form.get("how_many_races")),
+        "subscription_key": subscription_key,
+        "created_at": iso_now(),
+        "status": TASK_STATUS_QUEUED,
+        "races_botted": 0,
+        "logs": [{
+            "timestamp": iso_now(),
+            "message": "Task created and queued"
+        }]
+    }
+
+    task_manager.add_task(new_task)
+
+    # Start threads for queued tasks (respecting concurrency)
+    start_task_threads(task_manager)
+
+    return redirect(url_for("tasks_page"))
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template("404.html"), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    return render_template("500.html"), 500
+
+# ==================== Main Run ====================
 
 if __name__ == "__main__":
-    # Run Flask app in threaded mode so bot manager threads can run simultaneously
-    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+    print("Starting Nitrotype Bot Manager Flask backend...")
+    # Purge old tasks on startup
+    task_manager.purge_old_tasks()
+    # Kick off any queued task runners (if any)
+    start_task_threads(task_manager)
+
+    # Run Flask with debug for dev, bind all interfaces
+    app.run(host="0.0.0.0", port=5000, debug=True)
