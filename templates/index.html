@@ -1,1 +1,69 @@
-<!-- Home Page Template -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoTyper-Z Nitrotype Bot</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header>
+    <h1>AutoTyper-Z Nitrotype Bot</h1>
+    <p class="subtitle">Type faster, race harder. Powered by Flask & Selenium.</p>
+  </header>
+
+  <main>
+    <section class="form-section">
+      <h2>Start a New Bot</h2>
+      <form method="POST" action="/start_bot" autocomplete="off" class="bot-form">
+        <label for="username">Username</label>
+        <input type="text" name="username" id="username" required placeholder="Your Nitrotype username" />
+
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" required placeholder="Your Nitrotype password" />
+
+        <label for="avg_wpm">Average WPM</label>
+        <input type="number" name="avg_wpm" id="avg_wpm" min="10" max="150" value="60" required />
+
+        <label for="min_accuracy">Minimum Accuracy (%)</label>
+        <input type="number" name="min_accuracy" id="min_accuracy" min="50" max="100" value="95" required />
+
+        <label for="races">Number of Races</label>
+        <input type="number" name="races" id="races" min="1" max="100" value="1" required />
+
+        <button type="submit" class="btn">Start Bot</button>
+      </form>
+    </section>
+
+    <section class="status-section">
+      <h2>Active Bots</h2>
+      {% if bots %}
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Races Done</th>
+            <th>Total Races</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for bot in bots %}
+          <tr>
+            <td>{{ bot.username }}</td>
+            <td>{{ bot.races_done }}</td>
+            <td>{{ bot.races_to_run }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No active bots right now. Start one above!</p>
+      {% endif %}
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2025 AutoTyper-Z | Built with ❤️ by Ethan & ChatGPT</p>
+  </footer>
+</body>
+</html>
